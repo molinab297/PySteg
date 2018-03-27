@@ -28,6 +28,8 @@ details:
 
 '''
 
+# Number of pixels to store the length of the input text.
+TEXT_LEN_PIXELS = 11
 
 # Enbeds text in an image
 def encode(file_path, text):
@@ -41,41 +43,35 @@ def encode(file_path, text):
     pixmap_before = before.load()
 
     '''
-    Verify that the input text will fit into the image. We multiply the number of pixels by 3
-    because there are 3 RGB values in each pixel, and each bit of input text will be placed in
-    the LSB of each RGB value.
+    Verify that the input text will fit into the image. We subtract the numer of pixels needed to 
+    store the input text size, and then multiply the number of pixels by 3 because there are 3 RGB 
+    values in each pixel, and each bit of input text will be placed in the LSB of each RGB value.
     '''
     text_bits = tobits(text)
     num_pixels = before.size[0] * before.size[1]
-    if len(text_bits) > num_pixels * 3:
+    if len(text_bits) > (num_pixels - 11) * 3:
         raise ValueError("Error: input text cannot fit in image.")
 
     # Result image
     after = Image.new(before.mode, before.size)
     pixmap_after = after.load()
 
-    # Get length (in bits) of the input text represented in bits. Then place on the bottom right 11 pixels.
-    text_bits_len = len(text_bits)
-    len_bits = bin(text_bits_len)[2:]
-
-    # Embed the size of the input text in the first 11 pixels on the bottom right side of the image.
-    after = encode_text_size(before, pixmap_before, after, pixmap_after, len_bits)
-
-    # Embed the input text in the remainder of the image.
+    # Embed the input text in the image.
     after = encode_text(before, pixmap_before, after, pixmap_after, text_bits)
 
     return after
 
 
 # Function to encode 'len bits' within the first 11 pixels starting from the bottom right of an image.
-def encode_text_size(before, pixmap_before, after, pixmap_after, len_bits):
+def encode_text(before, pixmap_before, after, pixmap_after, text_bits):
+
+    # Get length (in bits) of the input text represented in bits. Then place on the bottom right 11 pixels.
+    text_bits_len = len(text_bits)
+    len_bits = bin(text_bits_len)[2:]
     index = len(len_bits) - 1
-    for i in range(11):
-
-        # Get pixel values
-        r, g, b = pixmap_before[before.size[0] - i - 1, before.size[1] - 1]
-
-        # Convert pixel values to their binary representations
+    for x in range(TEXT_LEN_PIXELS):
+        # Get pixel values and convert them to their binary representations.
+        r, g, b = pixmap_before[before.size[0] - x - 1, before.size[1] - 1]
         r_bin = int(bin(r), 2)
         g_bin = int(bin(g), 2)
         b_bin = int(bin(b), 2)
@@ -90,13 +86,31 @@ def encode_text_size(before, pixmap_before, after, pixmap_after, len_bits):
             g_bin = clear_bit(g_bin, 0)
             r_bin = clear_bit(r_bin, 0)
 
-        pixmap_after[before.size[0] - i - 1, before.size[1] - 1] = (r_bin, g_bin, b_bin)
+        pixmap_after[before.size[0] - x - 1, before.size[1] - 1] = (r_bin, g_bin, b_bin)
 
-    return after
+    # Encode remaining bits in the image.
+    index = 0
+    for x in range(before.size[0]):
+        for y in range(before.size[1]):
 
+            # Don't overwrite the input text length on the last 11 pixels.
+            if y == before.size[1] -1 and x == before.size[0] - TEXT_LEN_PIXELS - 1:
+                break
 
-# Function to encode 'text_bits' in an image.
-def encode_text(before, pixmap_before, after, pixmap_after, text_bits):
+            # Get pixel values and convert them to their binary representations
+            r, g, b = pixmap_before[x, y]
+            r_bin = int(bin(r), 2)
+            g_bin = int(bin(g), 2)
+            b_bin = int(bin(b), 2)
+
+            if index + 3 <= text_bits_len:
+                r_bin = set_bit(r_bin, 0) if text_bits[index] == 1 else clear_bit(r_bin, 0)
+                g_bin = set_bit(r_bin, 0) if text_bits[index + 1] == 1 else clear_bit(r_bin, 0)
+                b_bin = set_bit(r_bin, 0) if text_bits[index + 2] == 1 else clear_bit(r_bin, 0)
+                index += 3
+
+            pixmap_after[x, y] = (r_bin, g_bin, b_bin)
+
     return after
 
 
