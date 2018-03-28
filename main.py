@@ -1,13 +1,11 @@
-import sys
 import argparse
 from PIL import Image
-
 
 # Number of pixels to store the length of the input text.
 TEXT_LEN_PIXELS = 11
 
 # Mask to extract least significant bit of an 8-bit binary number
-MASK = 0b0000001
+MASK = 0b1
 
 def encode(file_path, text):
     """
@@ -15,7 +13,7 @@ def encode(file_path, text):
     of each RGB value within each pixel of an image. The bottom right 11 pixels of the image are
     reserved for storing the length of the text.
 
-    :param file_path: The relative path to the image.
+    :param file_path: The relative path to the image. The image must be in .jpg format.
     :param text: The text to encode into the image.
     :return: An image object, containing the embedded text.
     """
@@ -52,43 +50,53 @@ def encode(file_path, text):
 def encode_text(before, pixmap_before, after, pixmap_after, text_bits):
     # TODO: merge this and the 'encode' function together.
 
-    # Get length (in bits) of the input text represented in bits. Then place on the bottom right 11 pixels.
-    text_bits_len = len(text_bits)
-    len_bits = bin(text_bits_len)[2:]
-    index = len(len_bits) - 1
+    # 1). find out how many pixels to loop through in the decode function
+    # 2). take that result, convert it to binary, and store in bottom 11 pixels.
+    # print("'" + frombits(text_bits) + "' in bits:")
+    # print(text_bits)
+    num_loops = bin(int(len(text_bits) / 3))
+    # print("Data to store (# times to loop): " + num_loops + " (in decimal: " + str(int(num_loops, 2)) + ")")
+    num_loops = num_loops[2:]
+
+    i = 0
     for x in range(TEXT_LEN_PIXELS):
         r_bin, g_bin, b_bin = get_pixels_bin(pixmap_before, before.size[0] - x - 1, before.size[1] - 1)
 
-        if index - 2 >= 0:
-            b_bin = set_bit(r_bin, 0) if len_bits[index] == 1 else clear_bit(r_bin, 0)
-            g_bin = set_bit(r_bin, 0) if len_bits[index - 1] == 1 else clear_bit(r_bin, 0)
-            r_bin = set_bit(r_bin, 0) if len_bits[index - 2] == 1 else clear_bit(r_bin, 0)
-            index -= 2
+        # TODO: refactor these if-else statements
+        if i < len(num_loops):
+            b_bin = set_bit(b_bin, 0) if num_loops[i] == '1' else clear_bit(b_bin, 0)
+            i += 1
         else:
             b_bin = clear_bit(b_bin, 0)
+        if i < len(num_loops):
+            g_bin = set_bit(g_bin, 0) if num_loops[i] == '1' else clear_bit(g_bin, 0)
+            i += 1
+        else:
             g_bin = clear_bit(g_bin, 0)
+        if i < len(num_loops):
+            r_bin = set_bit(r_bin, 0) if num_loops[i] == '1' else clear_bit(r_bin, 0)
+            i += 1
+        else:
             r_bin = clear_bit(r_bin, 0)
 
         pixmap_after[before.size[0] - x - 1, before.size[1] - 1] = (r_bin, g_bin, b_bin)
 
-    # Encode remaining bits in the image.
+    # Encode the actual input text into the image.
+    num_loops = int(num_loops, 2)
     index = 0
-    for x in range(before.size[0]):
-        for y in range(before.size[1]):
+    for y in range(before.size[1]):
+        for x in range(before.size[0]):
 
-            # Don't overwrite the input text length on the last 11 pixels.
-            if y == before.size[1] -1 and x == before.size[0] - TEXT_LEN_PIXELS - 1:
+            if index == num_loops:
                 break
 
             r_bin, g_bin, b_bin = get_pixels_bin(pixmap_before, x, y)
-
-            if index + 3 <= text_bits_len:
-                r_bin = set_bit(r_bin, 0) if text_bits[index] == 1 else clear_bit(r_bin, 0)
-                g_bin = set_bit(r_bin, 0) if text_bits[index + 1] == 1 else clear_bit(r_bin, 0)
-                b_bin = set_bit(r_bin, 0) if text_bits[index + 2] == 1 else clear_bit(r_bin, 0)
-                index += 3
-
+            r_bin = set_bit(r_bin, 0) if text_bits[index] == 1 else clear_bit(r_bin, 0)
+            g_bin = set_bit(g_bin, 0) if text_bits[index + 1] == 1 else clear_bit(g_bin, 0)
+            b_bin = set_bit(b_bin, 0) if text_bits[index + 2] == 1 else clear_bit(b_bin, 0)
             pixmap_after[x, y] = (r_bin, g_bin, b_bin)
+
+            index += 1
 
     return after
 
@@ -97,7 +105,7 @@ def decode(file_path):
     """
     Decodes an image containing hidden text, if any hidden text exists.
 
-    :param file_path: The relative path to the image.
+    :param file_path: The relative path to the image. The image must be in .png format.
     :return: The text embedded in the image. If no text exists, then an empty
     string will be returned.
     """
@@ -107,14 +115,23 @@ def decode(file_path):
     img = Image.open(file_path)
     pixmap = img.load()
 
-    length_in_bits = ''
+    # Extract length of input text
+    bits = ''
     for x in range(TEXT_LEN_PIXELS):
         r_bin, g_bin, b_bin = get_pixels_bin(pixmap, img.size[0] - x - 1, img.size[1] - 1)
-        length_in_bits += str(b_bin & MASK)
-        length_in_bits += str(g_bin & MASK)
-        length_in_bits += str(r_bin & MASK)
+        bits += str(b_bin & MASK)
+        bits += str(g_bin & MASK)
+        bits += str(r_bin & MASK)
 
-    return int(length_in_bits)
+    # Trim trailing zeros
+    j = 0
+    for bit in reversed(bits):
+        if bit == '1':
+            break
+        j += 1
+
+    # Number of pixels to read from in the image
+    loop_count = int(bits[:len(bits) - j], 2)
 
 
 def get_pixels_bin(pixmap, x, y):
@@ -171,7 +188,7 @@ def tobits(s):
 
 def frombits(bits):
     """
-    Converts an array of bits to an integer string.
+    Converts an array of bits to back to a string.
     :param bits: The list of bits to convert.
     :return: A string with the integer value of the bits.
     """
@@ -207,5 +224,4 @@ if __name__ == '__main__':
         result.show()
         result.save('output.png')
     elif args.decode:
-        length = decode(args.path)
-        print(length)
+        decode(args.path)
