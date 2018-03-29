@@ -1,4 +1,5 @@
 import argparse
+import math
 from PIL import Image
 
 # Number of pixels to store the length of the input text.
@@ -50,53 +51,53 @@ def encode(file_path, text):
 def encode_text(before, pixmap_before, after, pixmap_after, text_bits):
     # TODO: merge this and the 'encode' function together.
 
-    # 1). find out how many pixels to loop through in the decode function
-    # 2). take that result, convert it to binary, and store in bottom 11 pixels.
-    # print("'" + frombits(text_bits) + "' in bits:")
-    # print(text_bits)
-    num_loops = bin(int(len(text_bits) / 3))
-    # print("Data to store (# times to loop): " + num_loops + " (in decimal: " + str(int(num_loops, 2)) + ")")
+    num_loops = bin(int(math.ceil(len(text_bits) / 3)))
     num_loops = num_loops[2:]
 
-    i = 0
+    # Encode the length of the input text into the image on the first 11 bottom right pixels.
+    i = len(num_loops) - 1
     for x in range(TEXT_LEN_PIXELS):
         r_bin, g_bin, b_bin = get_pixels_bin(pixmap_before, before.size[0] - x - 1, before.size[1] - 1)
 
-        # TODO: refactor these if-else statements
-        if i < len(num_loops):
+        if i >= 0:
             b_bin = set_bit(b_bin, 0) if num_loops[i] == '1' else clear_bit(b_bin, 0)
-            i += 1
+            i -= 1
         else:
             b_bin = clear_bit(b_bin, 0)
-        if i < len(num_loops):
+        if i >= 0:
             g_bin = set_bit(g_bin, 0) if num_loops[i] == '1' else clear_bit(g_bin, 0)
-            i += 1
+            i -= 1
         else:
             g_bin = clear_bit(g_bin, 0)
-        if i < len(num_loops):
+        if i >= 0:
             r_bin = set_bit(r_bin, 0) if num_loops[i] == '1' else clear_bit(r_bin, 0)
-            i += 1
+            i -= 1
         else:
             r_bin = clear_bit(r_bin, 0)
 
         pixmap_after[before.size[0] - x - 1, before.size[1] - 1] = (r_bin, g_bin, b_bin)
 
     # Encode the actual input text into the image.
-    num_loops = int(num_loops, 2)
-    index = 0
+    i = 0
     for y in range(before.size[1]):
         for x in range(before.size[0]):
 
-            if index == num_loops:
+            # Avoid writing over text length data on the 11 pixels on the bottom right.
+            if y == before.size[1] - 1 and x == before.size[0] - TEXT_LEN_PIXELS:
                 break
 
             r_bin, g_bin, b_bin = get_pixels_bin(pixmap_before, x, y)
-            r_bin = set_bit(r_bin, 0) if text_bits[index] == 1 else clear_bit(r_bin, 0)
-            g_bin = set_bit(g_bin, 0) if text_bits[index + 1] == 1 else clear_bit(g_bin, 0)
-            b_bin = set_bit(b_bin, 0) if text_bits[index + 2] == 1 else clear_bit(b_bin, 0)
-            pixmap_after[x, y] = (r_bin, g_bin, b_bin)
+            if i < len(text_bits):
+                r_bin = set_bit(r_bin, 0) if text_bits[i] == 1 else clear_bit(r_bin, 0)
+                i += 1
+            if i < len(text_bits):
+                g_bin = set_bit(g_bin, 0) if text_bits[i] == 1 else clear_bit(g_bin, 0)
+                i += 1
+            if i < len(text_bits):
+                b_bin = set_bit(b_bin, 0) if text_bits[i] == 1 else clear_bit(b_bin, 0)
+                i += 1
 
-            index += 1
+            pixmap_after[x, y] = (r_bin, g_bin, b_bin)
 
     return after
 
@@ -119,19 +120,30 @@ def decode(file_path):
     bits = ''
     for x in range(TEXT_LEN_PIXELS):
         r_bin, g_bin, b_bin = get_pixels_bin(pixmap, img.size[0] - x - 1, img.size[1] - 1)
-        bits += str(b_bin & MASK)
-        bits += str(g_bin & MASK)
-        bits += str(r_bin & MASK)
-
-    # Trim trailing zeros
-    j = 0
-    for bit in reversed(bits):
-        if bit == '1':
-            break
-        j += 1
+        bits = str(b_bin & MASK) + bits
+        bits = str(g_bin & MASK) + bits
+        bits = str(r_bin & MASK) + bits
 
     # Number of pixels to read from in the image
-    loop_count = int(bits[:len(bits) - j], 2)
+    loop_count = int(bits, 2)
+
+    # Read text from the image, starting from the top left pixel.
+    result = []
+    index = 0
+    for y in range(img.size[1]):
+        for x in range(img.size[0]):
+
+            if index == loop_count:
+                break
+
+            r_bin, g_bin, b_bin = get_pixels_bin(pixmap, x, y)
+            result.append(r_bin & MASK)
+            result.append(g_bin & MASK)
+            result.append(b_bin & MASK)
+
+            index += 1
+
+    return frombits(result)
 
 
 def get_pixels_bin(pixmap, x, y):
@@ -224,4 +236,5 @@ if __name__ == '__main__':
         result.show()
         result.save('output.png')
     elif args.decode:
-        decode(args.path)
+        message = decode(args.path)
+        print(message)
