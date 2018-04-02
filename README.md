@@ -25,6 +25,7 @@ optional arguments:
   -e TEXT, --encode TEXT
 			Text to encode in the image
   -d, --decode		Decode from an image
+```
 
 ### Example of embedding text in an image
 ```python
