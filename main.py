@@ -1,12 +1,18 @@
+"""
+Author: Blake Molina
+CWID: 890198401
+"""
+
 import argparse
 import math
 from PIL import Image
 
-# Number of pixels to store the length of the input text.
-TEXT_LEN_PIXELS = 11
+# The number of pixels to store the length of the input text.
+NUM_PIXELS_TO_HIDE_LEN = 11
 
-# Mask to extract least significant bit of an 8-bit binary number
+# The mask to extract the least significant bit of an 8-bit binary number
 MASK = 0b1
+
 
 def encode(file_path, text):
     """
@@ -42,21 +48,32 @@ def encode(file_path, text):
     pixmap_after = after.load()
 
     # Embed the input text in the image.
-    after = encode_text(before, pixmap_before, after, pixmap_after, text_bits)
-
-    return after
+    return encode_text(before, pixmap_before, after, pixmap_after, text_bits)
 
 
-# Function to encode 'len bits' within the first 11 pixels starting from the bottom right of an image.
 def encode_text(before, pixmap_before, after, pixmap_after, text_bits):
-    # TODO: merge this and the 'encode' function together.
+    """
+    Helper function for encode(file_path, text). This function does the actual job of embedding the
+    text in the least significant bit of each RGB value within each pixel of the image.
 
-    num_loops = bin(int(math.ceil(len(text_bits) / 3)))
+    :param before: The before picture.
+    :param pixmap_before: The PIL image access object of before.
+    :param after: The after picture.
+    :param pixmap_after: The PIL image access object of after.
+    :param text_bits: The input text, represented as a list of bits.
+    :return: An image containing the embedded text.
+    """
+
+    '''
+    This is an estimation of the number of times to loop. This value may need to be adjusted if the decode 
+    function is missing the last letter or two in the final output.
+    '''
+    num_loops = bin(int(math.ceil(len(text_bits) / 3 + 1)))
     num_loops = num_loops[2:]
 
     # Encode the length of the input text into the image on the first 11 bottom right pixels.
     i = len(num_loops) - 1
-    for x in range(TEXT_LEN_PIXELS):
+    for x in range(NUM_PIXELS_TO_HIDE_LEN):
         r_bin, g_bin, b_bin = get_pixels_bin(pixmap_before, before.size[0] - x - 1, before.size[1] - 1)
 
         if i >= 0:
@@ -83,7 +100,7 @@ def encode_text(before, pixmap_before, after, pixmap_after, text_bits):
         for x in range(before.size[0]):
 
             # Avoid writing over text length data on the 11 pixels on the bottom right.
-            if y == before.size[1] - 1 and x == before.size[0] - TEXT_LEN_PIXELS:
+            if y == before.size[1] - 1 and x == before.size[0] - NUM_PIXELS_TO_HIDE_LEN:
                 break
 
             r_bin, g_bin, b_bin = get_pixels_bin(pixmap_before, x, y)
@@ -118,7 +135,7 @@ def decode(file_path):
 
     # Extract length of input text
     bits = ''
-    for x in range(TEXT_LEN_PIXELS):
+    for x in range(NUM_PIXELS_TO_HIDE_LEN):
         r_bin, g_bin, b_bin = get_pixels_bin(pixmap, img.size[0] - x - 1, img.size[1] - 1)
         bits = str(b_bin & MASK) + bits
         bits = str(g_bin & MASK) + bits
@@ -223,7 +240,6 @@ class IllegalArgumentError(ValueError):
         super().__init__(message)
 
 
-# Driver function
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(usage='./PySteg [path] [-e string] [-d] [-h]')
     parser.add_argument('path', help='The relative path of the image to use')
@@ -232,9 +248,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.encode:
-        result = encode(args.path, args.encode)
-        result.show()
-        result.save('output.png')
+        encode(args.path, args.encode).save('output.png')
     elif args.decode:
-        message = decode(args.path)
-        print(message)
+        print(decode(args.path))
