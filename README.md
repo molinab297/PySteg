@@ -14,7 +14,7 @@ This program takes as input a path to a jpeg image and a string of characters. I
 Once all of this information has been computed, the program then loops through all of the pixels in the image and embeds the text in the least significant bit of each RGB value within each pixel. Pixels where no data is to be embedded are simply copied over from the original image.
  
 ## Execution Instructions
-```Shell
+```bash
 usage: ./PySteg [path to image] [-e string] [-d] [-h]
 
 positional arguments:
